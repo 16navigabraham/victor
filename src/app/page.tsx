@@ -1,7 +1,26 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
+
+// Deterministic pseudo-random based on seed to avoid hydration mismatch
+function seededRandom(seed: number) {
+  const x = Math.sin(seed * 9301 + 49297) * 49297;
+  return x - Math.floor(x);
+}
+
+const noMessages = [
+  "Babe just click yes 😤💅",
+  "You're actually unserious rn 🙄",
+  "Bestie the yes button is BEGGING you 😩",
+  "Ajokemi doesn't accept rejection 💀",
+  "This is giving delulu... just say yes 🤡",
+  "Your finger is literally hovering over yes rn 👀",
+  "Even your phone wants you to click yes 📱💕",
+  "God when?? RIGHT NOW if you click yes 🙏",
+  "The ancestors are watching... click yes 👁️",
+  "Plot twist: you already said yes in your heart 💖",
+];
 
 export default function Valentine() {
   const [stage, setStage] = useState<"ask" | "confirm" | "accepted">("ask");
@@ -9,12 +28,58 @@ export default function Valentine() {
   const [yesSize, setYesSize] = useState(1);
   const [noPos, setNoPos] = useState({ x: 0, y: 0 });
   const [clickedNoBefore, setClickedNoBefore] = useState(false);
+  const [confetti, setConfetti] = useState<Array<{ id: number; left: number; color: string; delay: number; duration: number }>>([]);
+  const [sparkles, setSparkles] = useState<Array<{ id: number; x: number; y: number }>>([]);
+  const [typedText, setTypedText] = useState("");
+  const [showQuote, setShowQuote] = useState(false);
+  const [sassShake, setSassShake] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const sparkleId = useRef(0);
+
+  const fullQuote =
+    "Every love story is beautiful, but ours is my favorite. From this moment on, I choose you — to laugh with, to dream with, and to build something beautiful together. 💕";
 
   useEffect(() => {
     audioRef.current = new Audio("https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3");
     audioRef.current.loop = true;
   }, []);
+
+  // Typewriter effect for the accepted screen quote
+  useEffect(() => {
+    if (stage !== "accepted" || !showQuote) return;
+    if (typedText.length >= fullQuote.length) return;
+
+    const timeout = setTimeout(() => {
+      setTypedText(fullQuote.slice(0, typedText.length + 1));
+    }, 30);
+    return () => clearTimeout(timeout);
+  }, [stage, showQuote, typedText, fullQuote]);
+
+  // Sparkle trail on mouse move (only on ask screen)
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (stage !== "ask") return;
+      const id = sparkleId.current++;
+      setSparkles((prev) => [...prev.slice(-12), { id, x: e.clientX, y: e.clientY }]);
+      setTimeout(() => {
+        setSparkles((prev) => prev.filter((s) => s.id !== id));
+      }, 600);
+    },
+    [stage]
+  );
+
+  const spawnConfetti = () => {
+    const colors = ["#ff6b8a", "#ff85a1", "#ffc2d1", "#fff0f3", "#ffdd00", "#ff6f61", "#a855f7", "#3b82f6"];
+    const pieces = Array.from({ length: 60 }, (_, i) => ({
+      id: i,
+      left: Math.random() * 100,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      delay: Math.random() * 0.8,
+      duration: 2 + Math.random() * 2,
+    }));
+    setConfetti(pieces);
+    setTimeout(() => setConfetti([]), 5000);
+  };
 
   const handleNo = () => {
     setClickedNoBefore(true);
@@ -24,6 +89,8 @@ export default function Valentine() {
       x: Math.random() * 250 - 125,
       y: Math.random() * 250 - 125,
     });
+    setSassShake(true);
+    setTimeout(() => setSassShake(false), 500);
   };
 
   const handleYes = () => {
@@ -31,12 +98,16 @@ export default function Valentine() {
       setStage("confirm");
     } else {
       setStage("accepted");
+      spawnConfetti();
+      setTimeout(() => setShowQuote(true), 800);
       audioRef.current?.play().catch(() => {});
     }
   };
 
   const handleConfirmYes = () => {
     setStage("accepted");
+    spawnConfetti();
+    setTimeout(() => setShowQuote(true), 800);
     audioRef.current?.play().catch(() => {});
   };
 
@@ -44,18 +115,39 @@ export default function Valentine() {
     setStage("ask");
   };
 
+  // Get the current sass message based on noCount
+  const getSassMessage = () => {
+    if (noCount < 3) return null;
+    const index = Math.min(noCount - 3, noMessages.length - 1);
+    return noMessages[index];
+  };
+
   // 🎉 Accepted screen
   if (stage === "accepted") {
     return (
       <div className="min-h-screen bg-gradient-to-br from-pink-400 via-red-500 to-rose-600 flex flex-col items-center justify-center overflow-hidden relative px-4">
+        {/* Confetti */}
+        {confetti.map((piece) => (
+          <div
+            key={piece.id}
+            className="confetti-piece"
+            style={{
+              left: `${piece.left}%`,
+              backgroundColor: piece.color,
+              animationDelay: `${piece.delay}s`,
+              animationDuration: `${piece.duration}s`,
+            }}
+          />
+        ))}
+
         {Array.from({ length: 30 }).map((_, i) => (
           <span
             key={i}
             className="absolute text-3xl md:text-4xl animate-float pointer-events-none"
             style={{
-              left: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 3}s`,
-              animationDuration: `${3 + Math.random() * 4}s`,
+              left: `${seededRandom(i + 100) * 100}%`,
+              animationDelay: `${seededRandom(i + 200) * 3}s`,
+              animationDuration: `${3 + seededRandom(i + 300) * 4}s`,
             }}
           >
             {["❤️", "💕", "💖", "💗", "💘", "🌹", "✨", "🦋"][i % 8]}
@@ -79,33 +171,31 @@ export default function Valentine() {
           </div>
 
           <h1
-            className="text-5xl md:text-8xl text-white mb-4 text-center drop-shadow-lg"
+            className="text-5xl md:text-8xl text-white mb-4 text-center drop-shadow-lg animate-slide-up"
             style={{ fontFamily: "var(--font-great-vibes)" }}
           >
             Yaaay!! 🎉🥳
           </h1>
 
           <p
-            className="text-2xl md:text-4xl text-white/90 text-center mb-6"
-            style={{ fontFamily: "var(--font-dancing)" }}
+            className="text-2xl md:text-4xl text-white/90 text-center mb-6 animate-slide-up"
+            style={{ fontFamily: "var(--font-dancing)", animationDelay: "0.2s", opacity: 0, animationFillMode: "forwards" }}
           >
             Ajokemi got herself a Valentine! 💕
           </p>
 
-          <div className="max-w-lg mx-auto bg-white/10 backdrop-blur-md rounded-2xl p-6 md:p-8 border border-white/20 shadow-xl mb-6">
+          <div className="max-w-lg mx-auto bg-white/10 backdrop-blur-md rounded-2xl p-6 md:p-8 border border-white/20 shadow-xl mb-6 animate-slide-up" style={{ animationDelay: "0.4s", opacity: 0, animationFillMode: "forwards" }}>
             <p
-              className="text-xl md:text-2xl text-white text-center leading-relaxed"
+              className={`text-xl md:text-2xl text-white text-center leading-relaxed ${showQuote && typedText.length < fullQuote.length ? "typewriter-cursor" : ""}`}
               style={{ fontFamily: "var(--font-dancing)" }}
             >
-              &ldquo;Every love story is beautiful, but ours is my favorite.
-              From this moment on, I choose you — to laugh with, to dream with,
-              and to build something beautiful together. 💕&rdquo;
+              &ldquo;{showQuote ? typedText : ""}&rdquo;
             </p>
           </div>
 
           <p
-            className="text-lg md:text-xl text-pink-100 text-center"
-            style={{ fontFamily: "var(--font-pacifico)" }}
+            className="text-lg md:text-xl text-pink-100 text-center animate-slide-up"
+            style={{ fontFamily: "var(--font-pacifico)", animationDelay: "0.6s", opacity: 0, animationFillMode: "forwards" }}
           >
             Happy Valentine&apos;s Day ❤️
           </p>
@@ -128,9 +218,9 @@ export default function Valentine() {
             key={i}
             className="absolute text-2xl opacity-20 animate-float pointer-events-none"
             style={{
-              left: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 5}s`,
-              animationDuration: `${4 + Math.random() * 6}s`,
+              left: `${seededRandom(i + 400) * 100}%`,
+              animationDelay: `${seededRandom(i + 500) * 5}s`,
+              animationDuration: `${4 + seededRandom(i + 600) * 6}s`,
             }}
           >
             💭
@@ -140,23 +230,23 @@ export default function Valentine() {
           <div className="w-28 h-28 md:w-36 md:h-36 rounded-full overflow-hidden border-4 border-white/80 shadow-xl mb-6 pulse-glow">
             <Image src="/ajokemi.jpg" alt="Ajokemi" width={144} height={144} className="object-cover w-full h-full" />
           </div>
-          <div className="text-5xl mb-4">🤔</div>
+          <div className="text-5xl mb-4 animate-heartbeat">🤔</div>
           <h2
-            className="text-3xl md:text-5xl text-white mb-3 text-center drop-shadow-lg"
+            className="text-3xl md:text-5xl text-white mb-3 text-center drop-shadow-lg animate-slide-up"
             style={{ fontFamily: "var(--font-pacifico)" }}
           >
             Wait fr fr? 👀
           </h2>
           <p
-            className="text-xl md:text-2xl text-white/90 mb-10 text-center"
-            style={{ fontFamily: "var(--font-dancing)" }}
+            className="text-xl md:text-2xl text-white/90 mb-10 text-center animate-slide-up"
+            style={{ fontFamily: "var(--font-dancing)", animationDelay: "0.2s", opacity: 0, animationFillMode: "forwards" }}
           >
             You sure you wanna be Ajokemi&apos;s Valentine? 💘
           </p>
           <div className="flex items-center gap-6">
             <button
               onClick={handleConfirmYes}
-              className="bg-pink-600 hover:bg-pink-700 text-white font-bold rounded-full shadow-lg hover:shadow-xl active:scale-95 px-10 py-4 text-xl cursor-pointer transition-all"
+              className="bg-pink-600 hover:bg-pink-700 text-white font-bold rounded-full shadow-lg hover:shadow-xl active:scale-95 px-10 py-4 text-xl cursor-pointer transition-all hover:scale-105"
               style={{ fontFamily: "var(--font-dancing)" }}
             >
               Yes I&apos;m sure! 💖
@@ -175,7 +265,21 @@ export default function Valentine() {
 
   // 💌 Main ask screen
   return (
-    <div className="min-h-screen relative flex flex-col items-center justify-center p-4 overflow-hidden">
+    <div
+      className="min-h-screen relative flex flex-col items-center justify-center p-4 overflow-hidden"
+      onMouseMove={handleMouseMove}
+    >
+      {/* Sparkle trail */}
+      {sparkles.map((s) => (
+        <div
+          key={s.id}
+          className="sparkle text-xl"
+          style={{ left: s.x - 10, top: s.y - 10 }}
+        >
+          ✨
+        </div>
+      ))}
+
       {/* Rich layered background */}
       <div className="absolute inset-0 bg-gradient-to-br from-rose-500 via-pink-600 to-fuchsia-700" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_50%,rgba(255,200,200,0.3),transparent_50%)]" />
@@ -188,9 +292,9 @@ export default function Valentine() {
           key={i}
           className="absolute text-2xl md:text-3xl opacity-30 animate-float pointer-events-none"
           style={{
-            left: `${Math.random() * 100}%`,
-            animationDelay: `${Math.random() * 5}s`,
-            animationDuration: `${4 + Math.random() * 6}s`,
+            left: `${seededRandom(i + 700) * 100}%`,
+            animationDelay: `${seededRandom(i + 800) * 5}s`,
+            animationDuration: `${4 + seededRandom(i + 900) * 6}s`,
           }}
         >
           {["❤️", "🌹", "💕", "✨", "🦋"][i % 5]}
@@ -202,7 +306,7 @@ export default function Valentine() {
           <Image src="/ajokemi.jpg" alt="Ajokemi" width={192} height={192} className="object-cover w-full h-full" />
         </div>
 
-        <div className="text-6xl mb-4">💌</div>
+        <div className="text-6xl mb-4 animate-heartbeat">💌</div>
 
         <h1
           className="text-4xl md:text-7xl text-white mb-3 text-center drop-shadow-lg"
@@ -234,7 +338,7 @@ export default function Valentine() {
 
           <button
             onClick={handleNo}
-            className="bg-white hover:bg-gray-100 text-gray-500 font-bold rounded-full shadow-md px-8 py-4 cursor-pointer transition-all"
+            className={`bg-white hover:bg-gray-100 text-gray-500 font-bold rounded-full shadow-md px-8 py-4 cursor-pointer transition-all ${sassShake ? "animate-sass-shake" : ""}`}
             style={{
               transform: `translate(${noPos.x}px, ${noPos.y}px) scale(${Math.max(0.4, 1 - noCount * 0.1)})`,
               transition: "transform 0.15s ease",
@@ -245,28 +349,23 @@ export default function Valentine() {
           </button>
         </div>
 
-        {noCount >= 3 && (
+        {/* Dynamic sass messages */}
+        {getSassMessage() && (
           <p
-            className="text-white/80 mt-8 text-lg animate-pulse text-center"
+            key={noCount}
+            className="text-white/90 mt-8 text-lg md:text-xl text-center animate-slide-up"
             style={{ fontFamily: "var(--font-dancing)" }}
           >
-            Babe just click yes 😤💅
+            {getSassMessage()}
           </p>
         )}
-        {noCount >= 5 && (
+
+        {noCount >= 7 && (
           <p
-            className="text-white text-xl font-bold mt-2 animate-bounce text-center"
+            className="text-pink-200 text-sm mt-4 text-center animate-pulse"
             style={{ fontFamily: "var(--font-pacifico)" }}
           >
-            THE YES BUTTON IS RIGHT THERE 😭👆
-          </p>
-        )}
-        {noCount >= 8 && (
-          <p
-            className="text-pink-200 text-lg mt-2 text-center"
-            style={{ fontFamily: "var(--font-pacifico)" }}
-          >
-            At this point you&apos;re just playing games bestie 🤡
+            The No button is literally disappearing... take the hint bestie 👋
           </p>
         )}
       </div>
